@@ -1,11 +1,11 @@
 # SmartFlow 智能客服系统
 
-> 电商售后 AI 客服系统，基于阿里云通义千问大模型
+> 电商售后 AI 客服系统，基于智谱AI大模型
 
 ## 功能特性
 
 ### 🤖 智能客服
-- 基于 Qwen-plus 大模型的智能对话
+- 基于 GLM-4-Flash 大模型的智能对话
 - 支持订单查询、物流追踪、退换货申请等场景
 - 流式响应，还原真实对话体验
 
@@ -26,7 +26,7 @@
 |------|------|
 | 框架 | Next.js 16, React 19 |
 | 样式 | Tailwind CSS 4 |
-| AI | 阿里云 DashScope (通义千问) |
+| AI | 智谱AI (GLM-4-Flash) |
 | 组件 | shadcn/ui |
 | 包管理 | pnpm |
 
@@ -81,7 +81,7 @@ smart-flow-v2/
 
 | 变量 | 说明 | 必填 |
 |------|------|------|
-| `DASHSCOPE_API_KEY` | 阿里云 DashScope API Key | 是 |
+| `ZHIPU_API_KEY` | 智谱AI API Key | 是 |
 
 ## 演示账号
 

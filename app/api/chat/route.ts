@@ -136,9 +136,9 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
-  const apiKey = process.env.DASHSCOPE_API_KEY;
+  const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) {
-    return new Response("Missing API key", { status: 500 });
+    return new Response("Missing ZHIPU_API_KEY", { status: 500 });
   }
 
   const chatMessages = [
@@ -150,7 +150,7 @@ export async function POST(req: Request) {
   ];
 
   const response = await fetch(
-    "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     {
       method: "POST",
       headers: {
@@ -158,9 +158,8 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "qwen-plus",
-        input: { messages: chatMessages },
-        parameters: { result_format: "message", stream: false },
+        model: "glm-4-flash",
+        messages: chatMessages,
       }),
     }
   );
@@ -171,7 +170,7 @@ export async function POST(req: Request) {
   }
 
   const data = await response.json();
-  const fullText = data.output?.choices?.[0]?.message?.content || "抱歉，我暂时无法回答。";
+  const fullText = data.choices?.[0]?.message?.content || "抱歉，我暂时无法回答。";
 
   const encoder = new TextEncoder();
   const chunks = fullText.match(/[^.!?。！？]+[.!?。！？]?/g) || [fullText];
