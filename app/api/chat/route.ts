@@ -160,6 +160,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "glm-4-flash",
         messages: chatMessages,
+        stream: true,
       }),
     }
   );
@@ -169,28 +170,52 @@ export async function POST(req: Request) {
     return new Response(`API Error: ${response.status} - ${errorText}`, { status: 500 });
   }
 
-  const data = await response.json();
-  const fullText = data.choices?.[0]?.message?.content || "抱歉，我暂时无法回答。";
-
   const encoder = new TextEncoder();
-  const chunks = fullText.match(/[^.!?。！？]+[.!?。！？]?/g) || [fullText];
+  const decoder = new TextDecoder();
 
   const stream = new ReadableStream({
-    start(controller) {
-      let index = 0;
-      const sendChunk = () => {
-        if (index >= chunks.length) {
-          controller.enqueue(encoder.encode("data: {\"type\":\"done\"}\n\n"));
-          controller.close();
-          return;
+    async start(controller) {
+      const reader = response.body!.getReader();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice(6).trim();
+            if (raw === "[DONE]") {
+              controller.enqueue(encoder.encode('data: {"type":"done"}\n\n'));
+              controller.close();
+              return;
+            }
+            try {
+              const parsed = JSON.parse(raw);
+              const text: string | undefined = parsed.choices?.[0]?.delta?.content;
+              if (text) {
+                const safe = text
+                  .replace(/\\/g, "\\\\")
+                  .replace(/"/g, '\\"')
+                  .replace(/\n/g, "\\n")
+                  .replace(/\r/g, "");
+                controller.enqueue(
+                  encoder.encode(`data: {"type":"content","text":"${safe}"}\n\n`)
+                );
+              }
+            } catch {
+              // skip malformed lines
+            }
+          }
         }
-        const chunk = chunks[index];
-        const escapedText = chunk.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-        controller.enqueue(encoder.encode(`data: {"type":"content","text":"${escapedText}"}\n\n`));
-        index++;
-        setTimeout(sendChunk, 30);
-      };
-      sendChunk();
+      } finally {
+        reader.releaseLock();
+      }
     },
   });
 
