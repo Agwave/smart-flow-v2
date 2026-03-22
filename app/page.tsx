@@ -14,10 +14,19 @@ interface Message {
   content: string
 }
 
+interface AgentStep {
+  agent: string
+  label: string
+  status: "waiting" | "in-progress" | "completed" | "failed"
+  result?: Record<string, unknown>
+  duration?: number
+}
+
 export default function Home() {
   const [chatKey, setChatKey] = useState(0)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([])
   const abortRef = useRef<AbortController | null>(null)
 
   const handleSend = useCallback(
@@ -38,6 +47,7 @@ export default function Home() {
         content: "",
       }
       setMessages(prev => [...prev, assistantMessage])
+      setAgentSteps([])
 
       abortRef.current = new AbortController()
       
@@ -73,7 +83,29 @@ export default function Home() {
             if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6))
-                if (data.type === "content" && data.text) {
+                
+                if (data.type === "agent_start") {
+                  setAgentSteps(prev => [
+                    ...prev,
+                    { agent: data.agent, label: data.label, status: "in-progress" }
+                  ])
+                } else if (data.type === "agent_complete") {
+                  setAgentSteps(prev => 
+                    prev.map(step => 
+                      step.agent === data.agent 
+                        ? { ...step, status: "completed", result: data.result, duration: data.duration }
+                        : step
+                    )
+                  )
+                } else if (data.type === "agent_error") {
+                  setAgentSteps(prev => 
+                    prev.map(step => 
+                      step.agent === data.agent 
+                        ? { ...step, status: "failed", result: { error: data.error } }
+                        : step
+                    )
+                  )
+                } else if (data.type === "content" && data.text) {
                   setMessages(prev => {
                     const last = prev[prev.length - 1]
                     if (last?.role === "assistant") {
@@ -121,7 +153,7 @@ export default function Home() {
               <QuickReplies onSelect={handleSend} disabled={isLoading} />
             </div>
           ) : (
-            <MessageList messages={messages} isLoading={isLoading} />
+            <MessageList messages={messages} isLoading={isLoading} agentSteps={agentSteps} />
           )}
           {hasMessages && (
             <QuickReplies onSelect={handleSend} disabled={isLoading} />

@@ -11,7 +11,9 @@ export async function POST(req: Request) {
     return new Response("Missing ZHIPU_API_KEY", { status: 500 });
   }
 
-  const orchestrator = createOrchestrator();
+  const orchestrator = createOrchestrator({
+    enableReview: true,
+  });
 
   const chatMessages: AgentMessage[] = messages.map(
     (msg: { role: string; content: string }) => ({
@@ -26,8 +28,7 @@ export async function POST(req: Request) {
 
       try {
         for await (const chunk of orchestrator.execute(chatMessages)) {
-          const prefix = chunk.includes('"type":"done"') ? 'data: {"type":"done"}' : `data: ${chunk}`;
-          controller.enqueue(encoder.encode(`${prefix}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
         }
         controller.close();
       } catch (error) {

@@ -38,7 +38,7 @@ interface AgentFlowCardProps {
 }
 
 export function AgentFlowCard({ data, animate = false }: AgentFlowCardProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
 
   return (
     <div className="rounded-xl border border-border bg-muted/50 overflow-hidden">

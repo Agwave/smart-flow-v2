@@ -64,16 +64,38 @@ export class AgentOrchestrator {
     ];
 
     let intentContext = "";
+    let intentResultData: Record<string, unknown> | null = null;
+    
     if (this.config.enabledAgents?.includes("intent")) {
+      yield JSON.stringify({ type: "agent_start", agent: "intent", label: "意图识别" });
+      
       const context: AgentContext = { messages };
       const intentResult = await intentAgent.execute(context);
+      
       if (intentResult.status === "completed" && intentResult.output) {
         const intent = intentResult.output;
+        intentResultData = intent;
         intentContext = `\n[用户意图: ${intent.intentLabel || intent.intent || "未知"}]`;
-        console.log("[Intent Agent] Intent:", intent);
         chatMessages[0].content += intentContext;
+        
+        yield JSON.stringify({ 
+          type: "agent_complete", 
+          agent: "intent", 
+          label: "意图识别",
+          result: intent,
+          duration: intentResult.duration 
+        });
+      } else {
+        yield JSON.stringify({ 
+          type: "agent_error", 
+          agent: "intent", 
+          label: "意图识别",
+          error: intentResult.error 
+        });
       }
     }
+
+    yield JSON.stringify({ type: "agent_start", agent: "answer", label: "生成回答" });
 
     const fullResponse: string[] = [];
     for await (const chunk of answerAgent.execute(chatMessages)) {
@@ -83,7 +105,11 @@ export class AgentOrchestrator {
       try {
         const parsed = JSON.parse(chunk);
         if (parsed.type === "done") {
+          yield JSON.stringify({ type: "agent_complete", agent: "answer", label: "生成回答" });
+
           if (this.config.enableReview) {
+            yield JSON.stringify({ type: "agent_start", agent: "review", label: "安全审核" });
+            
             const responseText = fullResponse
               .map(c => {
                 try {
@@ -96,7 +122,12 @@ export class AgentOrchestrator {
             
             if (responseText) {
               const reviewResult = await this.reviewResponse(responseText);
-              console.log("[Review Agent] Result:", reviewResult);
+              yield JSON.stringify({ 
+                type: "agent_complete", 
+                agent: "review", 
+                label: "安全审核",
+                result: reviewResult 
+              });
             }
           }
           return;

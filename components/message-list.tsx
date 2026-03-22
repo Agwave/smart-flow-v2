@@ -5,13 +5,20 @@ import { Headset, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AgentFlowCard } from "@/components/chat/agent-flow-card"
 import { ToolResultCard } from "@/components/chat/tool-result-card"
-import { generateMockAgentFlow } from "@/lib/mock-data"
-import type { AgentFlowData, ToolResultData } from "@/lib/types"
+import type { ToolResultData } from "@/lib/types"
 
 interface Message {
   id: string
   role: "user" | "assistant"
   content: string
+}
+
+interface AgentStep {
+  agent: string
+  label: string
+  status: "waiting" | "in-progress" | "completed" | "failed"
+  result?: Record<string, unknown>
+  duration?: number
 }
 
 function getMessageText(msg: Message): string {
@@ -94,27 +101,19 @@ function detectToolResult(text: string): ToolResultData | undefined {
 interface MessageListProps {
   messages: Message[]
   isLoading: boolean
+  agentSteps?: AgentStep[]
 }
 
-export function MessageList({ messages, isLoading }: MessageListProps) {
+export function MessageList({ messages, isLoading, agentSteps = [] }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // Pre-compute agent flows for assistant messages that follow user messages
-  const agentFlows = useMemo(() => {
-    const flows = new Map<string, AgentFlowData>()
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].role === "assistant" && i > 0 && messages[i - 1].role === "user") {
-        const userText = getMessageText(messages[i - 1])
-        const { intent, needsTicket } = detectMockIntent(userText)
-        flows.set(messages[i].id, generateMockAgentFlow(intent, needsTicket))
-      }
-    }
-    return flows
-  }, [messages])
+  // Get agent steps for the last assistant message
+  const lastAssistantMessage = messages.filter(m => m.role === "assistant").pop()
+  const lastAgentSteps = lastAssistantMessage ? agentSteps : []
 
   // Pre-compute tool result cards for assistant messages
   const toolResults = useMemo(() => {
@@ -137,15 +136,32 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         {messages.map((message) => {
           const isUser = message.role === "user"
           const text = getMessageText(message)
-          const agentFlow = agentFlows.get(message.id)
+          const isLastAssistant = message.id === lastAssistantMessage?.id
           const toolResult = toolResults.get(message.id)
 
           return (
             <div key={message.id} className="flex flex-col gap-2">
-              {/* Agent flow card appears before assistant messages */}
-              {!isUser && agentFlow && (
+              {/* Agent flow card appears before last assistant message */}
+              {!isUser && isLastAssistant && lastAgentSteps.length > 0 && (
                 <div className="ml-11">
-                  <AgentFlowCard data={agentFlow} />
+                  <AgentFlowCard
+                    data={{
+                      steps: lastAgentSteps.map(step => ({
+                        agent: step.agent as "intent" | "rag" | "answer" | "review" | "ticket_router",
+                        label: step.label,
+                        status: step.status === "failed" ? "waiting" : step.status,
+                        duration: step.duration,
+                      })),
+                      intentResult: lastAgentSteps.find(s => s.agent === "intent")?.result as {
+                        intent: string
+                        intentLabel: string
+                        canAutoAnswer: boolean
+                        confidence: number
+                        keyEntities: string[]
+                      } | undefined,
+                      totalDuration: lastAgentSteps.reduce((acc, s) => acc + (s.duration || 0), 0),
+                    }}
+                  />
                 </div>
               )}
 
@@ -193,40 +209,15 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         })}
 
         {isLoading && messages[messages.length - 1]?.role === "user" && (
-          <div className="flex flex-col gap-2">
-            {/* Show in-progress agent flow while loading */}
-            <div className="ml-11">
-              <AgentFlowCard
-                data={{
-                  steps: [
-                    { agent: "intent", label: "意图识别", status: "completed", duration: 120 },
-                    { agent: "rag", label: "知识检索", status: "in-progress" },
-                    { agent: "answer", label: "回答生成", status: "waiting" },
-                    { agent: "review", label: "质量审核", status: "waiting" },
-                  ],
-                  intentResult: {
-                    intent: "processing",
-                    intentLabel: "分析中...",
-                    canAutoAnswer: true,
-                    confidence: 0,
-                    keyEntities: [],
-                  },
-                  totalDuration: 0,
-                }}
-                animate
-              />
+          <div className="flex gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Headset className="h-4 w-4" />
             </div>
-
-            <div className="flex gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Headset className="h-4 w-4" />
-              </div>
-              <div className="rounded-2xl rounded-tl-md border border-border bg-card px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.3s]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.15s]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60" />
-                </div>
+            <div className="rounded-2xl rounded-tl-md border border-border bg-card px-4 py-3 shadow-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.3s]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.15s]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60" />
               </div>
             </div>
           </div>
